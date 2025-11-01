@@ -1,0 +1,7 @@
+<resources>
+
+    <style name="Theme.AndroidKvEditor.AppBarOverlay" parent="ThemeOverlay.Material3.Dark.ActionBar" />
+    
+    <style name="Theme.AndroidKvEditor.PopupOverlay" parent="ThemeOverlay.Material3.Light" />
+
+</resources>

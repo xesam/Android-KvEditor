@@ -1,0 +1,78 @@
+plugins {
+    alias(libs.plugins.android.library)
+    id "com.vanniktech.maven.publish" version "0.34.0"
+    id 'signing'
+}
+
+android {
+    namespace 'io.github.xesam.android.kveditor'
+    compileSdk {
+        version = release(36)
+    }
+
+    defaultConfig {
+        minSdk 21
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    compileOnly libs.mmkv
+    compileOnly libs.recyclerview
+    compileOnly libs.annotation
+    testImplementation libs.junit
+    androidTestImplementation libs.ext.junit
+    androidTestImplementation libs.espresso.core
+}
+
+mavenPublishing {
+    coordinates("io.github.xesam", "android-kveditor", "0.0.1")
+    pom {
+        name = 'Android-KvEditor'
+        description = 'A KV-Storage[SharedPreferences or MMKV] Editor for Android Debug'
+        url = 'https://github.com/xesam/Android-KvEditor'
+        inceptionYear = "2025"
+
+        licenses {
+            license {
+                name = 'MIT'
+                url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                distribution = 'repo'
+            }
+        }
+
+        developers {
+            developer {
+                id = 'xesam'
+                name = 'xesam'
+                email = 'xesam@outlook.com'
+                organization = 'xesam'
+                organizationUrl = 'https://github.com/xesam'
+            }
+        }
+
+        scm {
+            connection = 'scm:git:git://github.com/xesam/Android-KvEditor.git'
+            developerConnection = 'scm:git:ssh://github.com:xesam/Android-KvEditor.git'
+            url = 'https://github.com/xesam/Android-KvEditor'
+        }
+    }
+
+    // 发布到Maven Central
+    publishToMavenCentral()
+    // 对发布的包进行签名
+    signAllPublications()
+}

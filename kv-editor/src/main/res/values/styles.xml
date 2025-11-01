@@ -1,0 +1,7 @@
+<resources>
+
+    <style name="Theme.AndroidKvEditor.AppBarOverlay" parent="android:Theme.Holo" />
+    
+    <style name="Theme.AndroidKvEditor.PopupOverlay" parent="android:Theme.Holo" />
+
+</resources>
