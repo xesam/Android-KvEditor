@@ -523,8 +523,9 @@ public class AddEditDialog extends AlertDialog {
             Object value = getCurrentValue();
 
             if (mCurrentKvPair != null) {
-                // 编辑模式
+                // 编辑模式 - 需要同时更新 value 和 dataType
                 mCurrentKvPair.setValue(value);
+                mCurrentKvPair.setDataType(mSelectedDataType); // 🔧 修复：更新数据类型
                 if (mSaveListener != null) {
                     mSaveListener.onSave(mCurrentKvPair);
                 }
@@ -532,7 +533,7 @@ public class AddEditDialog extends AlertDialog {
                 // 添加模式
                 // 创建新的KvPair对象
                 KvPair newKvPair = new KvPair(key, value, mSelectedDataType);
-                
+
                 // 回调保存监听器
                 if (mSaveListener != null) {
                     mSaveListener.onSave(newKvPair);
@@ -542,7 +543,8 @@ public class AddEditDialog extends AlertDialog {
             // 关闭对话框
             dismiss();
         } catch (Exception e) {
-            Toast.makeText(getContext(), "值无效", Toast.LENGTH_SHORT).show();
+            android.util.Log.e("AddEditDialog", "保存失败", e);
+            Toast.makeText(getContext(), "保存失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
 }
