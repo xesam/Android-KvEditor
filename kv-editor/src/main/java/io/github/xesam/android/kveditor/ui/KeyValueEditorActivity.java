@@ -3,14 +3,21 @@ package io.github.xesam.android.kveditor.ui;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.View;
+import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import io.github.xesam.android.kveditor.R;
@@ -33,13 +40,42 @@ public class KeyValueEditorActivity extends Activity {
     private RecyclerView mRecyclerView;
     private KeyValueAdapter mAdapter;
     private List<KvPair> mKvPairList;
+    private List<KvPair> mFilteredKvPairList; // 过滤后的列表
     private StorageType mCurrentStorageType;
+    private TextView mSortText;
+    private EditText mSearchEditText;
+
+    // 排序方式枚举
+    private enum SortOption {
+        KEY_ASC("键名升序", "a-z"),
+        KEY_DESC("键名降序", "z-a"),
+        TYPE_ASC("类型升序", "类型A-Z"),
+        TYPE_DESC("类型降序", "类型Z-A");
+
+        private final String displayName;
+        private final String shortName;
+
+        SortOption(String displayName, String shortName) {
+            this.displayName = displayName;
+            this.shortName = shortName;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+
+        public String getShortName() {
+            return shortName;
+        }
+    }
+
+    private SortOption mCurrentSortOption = SortOption.KEY_ASC; // 默认按键名升序
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_key_value_editor);
-        
+
         // 获取文件名
         mFileName = getIntent().getStringExtra(EXTRA_FILE_NAME);
         if (mFileName == null) {
@@ -57,6 +93,35 @@ public class KeyValueEditorActivity extends Activity {
         // 初始化RecyclerView
         mRecyclerView = findViewById(R.id.recycler_view);
         mRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+
+        // 初始化列表
+        mKvPairList = new ArrayList<>();
+        mFilteredKvPairList = new ArrayList<>();
+
+        // 获取UI控件
+        mSortText = findViewById(R.id.sort_text);
+        mSearchEditText = findViewById(R.id.search_edit_text);
+
+        // 排序按钮点击事件
+        mSortText.setOnClickListener(v -> {
+            showSortDialog();
+        });
+
+        // 搜索框文本变化监听
+        mSearchEditText.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                filterKvPairs(s.toString());
+            }
+        });
+
+        updateSortText();
 
         // 加载键值对数据
         loadKvPairs();
@@ -89,15 +154,21 @@ public class KeyValueEditorActivity extends Activity {
 
         // 根据存储类型加载数据
         Map<String, ?> all = null;
-        
+
         // 使用StorageManager获取存储适配器
         StorageConfig config = new StorageConfig.Builder()
                 .setName(mFileName)
                 .setType(mCurrentStorageType)
                 .build();
         StorageAdapter storageAdapter = StorageManager.getInstance(this).getAdapter(config);
-        
-        all = storageAdapter.getAll();
+
+        try {
+            all = storageAdapter.getAll();
+        } catch (Exception e) {
+            android.util.Log.e("KeyValueEditorActivity", "加载数据失败", e);
+            showToast("加载数据失败: " + e.getMessage());
+            all = null;
+        }
 
         mKvPairList = new ArrayList<>();
 
@@ -110,15 +181,50 @@ public class KeyValueEditorActivity extends Activity {
             }
         }
 
-        // 更新UI
+        // 应用搜索过滤
+        String searchText = mSearchEditText.getText().toString().trim();
+        filterKvPairs(searchText);
+    }
+
+    /**
+     * 过滤键值对（根据搜索关键词）
+     */
+    private void filterKvPairs(String searchText) {
+        // 隐藏加载状态
         findViewById(R.id.progress_bar).setVisibility(View.GONE);
 
-        if (mKvPairList.isEmpty()) {
+        if (searchText == null || searchText.trim().isEmpty()) {
+            mFilteredKvPairList = new ArrayList<>(mKvPairList);
+        } else {
+            String query = searchText.toLowerCase(Locale.ROOT);
+            mFilteredKvPairList = new ArrayList<>();
+            for (KvPair pair : mKvPairList) {
+                String key = pair.getKey().toLowerCase(Locale.ROOT);
+                String valueStr = DataTypeConverter.convertValueToString(pair.getValue()).toLowerCase(Locale.ROOT);
+                if (key.contains(query) || valueStr.contains(query)) {
+                    mFilteredKvPairList.add(pair);
+                }
+            }
+        }
+
+        // 应用排序
+        sortKvPairs(mFilteredKvPairList, mCurrentSortOption);
+
+        // 更新UI
+        updateAdapter();
+    }
+
+    /**
+     * 更新适配器
+     */
+    private void updateAdapter() {
+        if (mFilteredKvPairList.isEmpty()) {
             findViewById(R.id.empty_view).setVisibility(View.VISIBLE);
         } else {
+            findViewById(R.id.empty_view).setVisibility(View.GONE);
             // 创建或更新适配器
             if (mAdapter == null) {
-                mAdapter = new KeyValueAdapter(mKvPairList, new KeyValueAdapter.OnItemClickListener() {
+                mAdapter = new KeyValueAdapter(mFilteredKvPairList, new KeyValueAdapter.OnItemClickListener() {
                     @Override
                     public void onItemClick(KvPair kvPair) {
                         showAddEditDialog(kvPair);
@@ -139,9 +245,78 @@ public class KeyValueEditorActivity extends Activity {
                 });
                 mRecyclerView.setAdapter(mAdapter);
             } else {
-                mAdapter.updateData(mKvPairList);
+                mAdapter.updateData(mFilteredKvPairList);
             }
         }
+    }
+
+    /**
+     * 根据排序选项对键值对列表进行排序
+     */
+    private void sortKvPairs(List<KvPair> kvPairs, SortOption sortOption) {
+        if (kvPairs == null || kvPairs.isEmpty()) {
+            return;
+        }
+
+        Comparator<KvPair> comparator;
+        switch (sortOption) {
+            case KEY_ASC:
+                comparator = (a, b) -> a.getKey().compareToIgnoreCase(b.getKey());
+                break;
+            case KEY_DESC:
+                comparator = (a, b) -> b.getKey().compareToIgnoreCase(a.getKey());
+                break;
+            case TYPE_ASC:
+                comparator = (a, b) -> a.getDataType().name().compareTo(b.getDataType().name());
+                break;
+            case TYPE_DESC:
+                comparator = (a, b) -> b.getDataType().name().compareTo(a.getDataType().name());
+                break;
+            default:
+                comparator = (a, b) -> a.getKey().compareToIgnoreCase(b.getKey());
+                break;
+        }
+
+        Collections.sort(kvPairs, comparator);
+    }
+
+    /**
+     * 显示排序选择对话框
+     */
+    private void showSortDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("选择排序方式");
+
+        SortOption[] options = SortOption.values();
+        String[] optionNames = new String[options.length];
+        for (int i = 0; i < options.length; i++) {
+            optionNames[i] = options[i].getDisplayName();
+        }
+
+        int checkedIndex = 0;
+        for (int i = 0; i < options.length; i++) {
+            if (options[i] == mCurrentSortOption) {
+                checkedIndex = i;
+                break;
+            }
+        }
+
+        builder.setSingleChoiceItems(optionNames, checkedIndex, (dialog, which) -> {
+            mCurrentSortOption = options[which];
+            updateSortText();
+            filterKvPairs(mSearchEditText.getText().toString().trim());
+            dialog.dismiss();
+        });
+
+        builder.setNegativeButton("取消", null);
+        builder.show();
+    }
+
+    /**
+     * 更新排序文本
+     */
+    private void updateSortText() {
+        mSortText.setText(mCurrentSortOption.getShortName());
     }
 
     /**
@@ -162,7 +337,7 @@ public class KeyValueEditorActivity extends Activity {
      */
     private void saveKvPair(KvPair kvPair) {
         boolean success = false;
-        
+
         try {
             // 使用StorageManager获取存储适配器
             StorageConfig config = new StorageConfig.Builder()
@@ -194,6 +369,7 @@ public class KeyValueEditorActivity extends Activity {
             }
             success = true;
         } catch (Exception e) {
+            android.util.Log.e("KeyValueEditorActivity", "保存失败", e);
             success = false;
         }
 
@@ -210,7 +386,7 @@ public class KeyValueEditorActivity extends Activity {
      */
     private void deleteKvPair(KvPair kvPair) {
         boolean success = false;
-        
+
         try {
             // 使用StorageManager获取存储适配器
             StorageConfig config = new StorageConfig.Builder()
@@ -221,6 +397,7 @@ public class KeyValueEditorActivity extends Activity {
             adapter.remove(kvPair.getKey());
             success = true;
         } catch (Exception e) {
+            android.util.Log.e("KeyValueEditorActivity", "删除失败", e);
             success = false;
         }
 
